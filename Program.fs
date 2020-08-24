@@ -4,6 +4,11 @@ open System.IO.Compression
 open System.Net.Http
 open System.Xml.Linq
 
+let printlnInRed msg =
+    Console.ForegroundColor <- ConsoleColor.Red
+    printfn "%s" msg
+    Console.ForegroundColor <- ConsoleColor.Gray
+
 let rec saveResult n (cid, xdoc: XDocument) =
     let path = sprintf "%s/result_%i_(%i).xml" Environment.CurrentDirectory cid n
     if File.Exists path 
@@ -14,7 +19,7 @@ let rec saveResult n (cid, xdoc: XDocument) =
         path
 
 let fromXml =
-    BilibiliDanmakuParser.DanmakuAnalyser.getDanmakuXElement
+    BilibiliDanmakuParser.DanmakuAnalyser.getDanmakus
     >> saveResult 0
     >> printfn "分析完成，已保存至%s。"
 
@@ -48,7 +53,8 @@ module FromVideoPart =
     """>
 
     let private showParts (data: PartsJson.Datum seq) =
-        for i in data do printfn "[%i]%s" i.Page i.Part
+        for i in data do 
+            printfn "[%i]%s" i.Page i.Part
 
     let rec private readPartIndex max = 
         printfn "\n请选择一个视频："
@@ -57,9 +63,7 @@ module FromVideoPart =
         if Int32.TryParse (input, &r) && r > 0 && r <= max 
         then r
         else 
-            Console.ForegroundColor <- ConsoleColor.Red
-            printfn "输入的内容错误。"
-            Console.ForegroundColor <- ConsoleColor.Gray
+            printlnInRed "输入的内容错误。"
             readPartIndex max
 
     let private cli (uri: string) =
@@ -76,9 +80,7 @@ module FromVideoPart =
                     else readPartIndex json.Data.Length
                 printfn "\n已选择 p%i ：%s 。" selectedPart json.Data.[selectedPart - 1].Part
                 fromCid json.Data.[selectedPart - 1].Cid
-            else
-                Console.ForegroundColor <- ConsoleColor.Red
-                printfn "服务器返回错误代码%i：%s。" json.Code json.Message
+            else printlnInRed <| sprintf "服务器返回错误代码%i：%s。" json.Code json.Message
         } |> Async.RunSynchronously
 
     let cliAvid =
@@ -93,6 +95,7 @@ let showHelp () =
     printfn "命令："
     printfn "  -av, --FromAVId"
     printfn "    参数：AV号"
+    printfn "    获取特定稿件下某视频的弹幕列表。"
     printfn "  -bv, --FromBVId"
     printfn "    参数：BV号（包含前缀“BV”）"
     printfn "    获取特定稿件下某视频的弹幕列表。"
@@ -115,7 +118,7 @@ let validCmd =
 let main argv =
     try
         match argv with
-        | [| cmd; arg |] when validCmd |> List.contains cmd -> 
+        | [| cmd; arg |] when validCmd |> List.contains cmd ->
             match cmd with
             | "-av" | "--FromAVId" ->
                 arg
@@ -140,15 +143,12 @@ let main argv =
         | [||] -> showHelp ()
 
         | _ -> 
-            Console.ForegroundColor <- ConsoleColor.Red
             argv 
             |> String.concat " "
-            |> printfn "参数“%s”不正确。"
-            Console.ForegroundColor <- ConsoleColor.Gray
+            |> sprintf "参数“%s”不正确。"
+            |> printlnInRed
             showHelp ()
         0
     with ex -> 
-        Console.ForegroundColor <- ConsoleColor.Red
-        printfn "发生异常。"
-        printfn "%A" ex
-        1
+        printlnInRed <| sprintf "发生异常。\n%A" ex
+        ex.HResult
