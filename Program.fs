@@ -18,10 +18,19 @@ let rec saveResult n (cid, xdoc: XDocument) =
         xdoc.Save (stream, SaveOptions.None)
         path
 
-let fromXml =
-    BilibiliDanmakuParser.DanmakuAnalyser.getDanmakus
-    >> saveResult 0
-    >> printfn "分析完成，已保存至%s。"
+let fromXml xml =
+    xml
+    |> BilibiliDanmakuParser.DanmakuAnalyser.getDanmakus
+    |> saveResult 0
+    |> (fun x -> 
+            Console.CursorLeft <- 0
+            printf " 　　　　　　　　　　　　　　　　　　　　　　　　　　　　　"
+            Console.CursorLeft <- 0
+            Console.CursorVisible <- true 
+            x
+    )
+    |> printfn "\n分析完成，已保存至%s。"
+    
 
 let fromCid cid = 
     printfn "正在获取弹幕列表……"
@@ -90,21 +99,25 @@ module FromVideoPart =
         cli << sprintf "https://api.bilibili.com/x/player/pagelist?bvid=%s"
 
 let showHelp () =
-    printfn "用法：BilibiliDanmakuParser 命令 参数"
-    printfn "获取/分析Bilibili的弹幕数据。"
-    printfn "命令："
-    printfn "  -av, --FromAVId"
-    printfn "    参数：AV号"
-    printfn "    获取特定稿件下某视频的弹幕列表。"
-    printfn "  -bv, --FromBVId"
-    printfn "    参数：BV号（包含前缀“BV”）"
-    printfn "    获取特定稿件下某视频的弹幕列表。"
-    printfn "  -c, --FromCId"
-    printfn "    参数：某视频的编号（即“cid”）"
-    printfn "    获取特定BV号下的弹幕列表。"
-    printfn "  -f, --FromDanmakuFile"
-    printfn "    参数：以XML格式保存的弹幕文件路径"
-    printfn "    分析指定的弹幕文件。"
+    printfn "获取Bilibili的弹幕数据。"
+    printfn "由于程序用的是暴力枚举 Uid ，程序运行速度会比较慢，同时会占用部分磁盘空间（大约 6GiB）。"
+    printfn "请注意：程序不正常退出时生成的字典文件不可靠（无法得到正确的 Uid），请将它删除后再运行。"
+    printfn ""
+    printfn "用法："
+    printfn "    BilibiliDanmakuParser 命令 参数"
+    printfn "命令及参数说明："
+    printfn "    -av, --FromAVId"
+    printfn "        参数：AV号"
+    printfn "        获取特定稿件下某视频的弹幕列表。"
+    printfn "    -bv, --FromBVId"
+    printfn "        参数：BV号（包含前缀“BV”）"
+    printfn "        获取特定稿件下某视频的弹幕列表。"
+    printfn "    -c, --FromCId"
+    printfn "        参数：某视频的编号（即“cid”）"
+    printfn "        获取特定BV号下的弹幕列表。"
+    printfn "    -f, --FromDanmakuFile"
+    printfn "        参数：以XML格式保存的弹幕文件路径"
+    printfn "        分析指定的弹幕文件。"
 
 let validCmd = 
     [ 
@@ -117,6 +130,10 @@ let validCmd =
 [<EntryPoint>]
 let main argv =
     try
+        Console.CancelKeyPress.Add(fun _ ->
+            Console.CursorVisible <- true
+            printfn "\n程序中止。"
+        )
         match argv with
         | [| cmd; arg |] when validCmd |> List.contains cmd ->
             match cmd with
