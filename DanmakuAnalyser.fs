@@ -92,7 +92,7 @@ module private utils =
             Uid n
         else _getUid (n + 1) id sw
 
-    let cacheFilePath = Environment.CurrentDirectory + "/hash_cache"
+    let cacheFilePath = AppDomain.CurrentDomain.BaseDirectory + "/hash_cache"
     
     let rec private getUidFromDict id =
         let stream = File.Open (cacheFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite)
