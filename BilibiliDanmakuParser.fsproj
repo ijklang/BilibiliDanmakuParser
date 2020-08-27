@@ -6,7 +6,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="ProgressBar.fs" />
     <Compile Include="DanmakuAnalyser.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

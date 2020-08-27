@@ -1,4 +1,5 @@
-﻿open System
+﻿open BilibiliDanmakuParser
+open System
 open System.IO
 open System.IO.Compression
 open System.Net.Http
@@ -10,32 +11,27 @@ let printlnInRed msg =
     Console.ForegroundColor <- ConsoleColor.Gray
 
 let rec saveResult n (cid, xdoc: XDocument) =
-    let path = sprintf "%s/result_%i_(%i).xml" Environment.CurrentDirectory cid n
-    if File.Exists path 
+    let path = sprintf "%s%cresult_%i_(%i).xml" Environment.CurrentDirectory Path.DirectorySeparatorChar cid n
+    if File.Exists path
     then saveResult (n + 1) (cid, xdoc)
-    else 
+    else
         let stream = File.Create path
         xdoc.Save (stream, SaveOptions.None)
         path
 
 let fromXml parseUid xml =
     xml
-    |> BilibiliDanmakuParser.DanmakuAnalyser.getDanmakus parseUid
+    |> DanmakuAnalyser.getDanmakus parseUid
     |> saveResult 0
-    |> (fun x -> 
-            Console.CursorLeft <- 0
-            printf " 　　　　　　　　　　　　　　　　　　　　　　　　　　　　　"
-            Console.CursorLeft <- 0
-            Console.CursorVisible <- true 
-            x
-    )
     |> printfn "\n分析完成，已保存至%s。"
-    
 
-let fromCid parseUid cid = 
+let fromCid parseUid cid =
     printfn "正在获取弹幕列表……"
     use client = new HttpClient ()
-    let uri = Uri <| sprintf "https://comment.bilibili.com/%i.xml" cid
+    let uri =
+        cid
+        |> sprintf "https://comment.bilibili.com/%i.xml"
+        |> Uri
     async {
         let! bytes = client.GetByteArrayAsync uri |> Async.AwaitTask
         use memoryStream  = new MemoryStream (bytes)
@@ -53,7 +49,7 @@ module FromVideoPart =
         "message":"err",
         "data":[
             {
-                "cid":0,
+                "cid":100000000000,
                 "page":1,
                 "part":"example"
             }
@@ -62,16 +58,16 @@ module FromVideoPart =
     """>
 
     let private showParts (data: PartsJson.Datum seq) =
-        for i in data do 
+        for i in data do
             printfn "[%i]%s" i.Page i.Part
 
-    let rec private readPartIndex max = 
+    let rec private readPartIndex max =
         printfn "\n请选择一个视频："
         let input = Console.ReadLine ()
         let mutable r = 0
-        if Int32.TryParse (input, &r) && r > 0 && r <= max 
+        if Int32.TryParse (input, &r) && r > 0 && r <= max
         then r
-        else 
+        else
             printlnInRed "输入的内容错误。"
             readPartIndex max
 
@@ -84,7 +80,7 @@ module FromVideoPart =
                 printfn "该稿件共有%i个视频。" json.Data.Length
                 showParts json.Data
                 let selectedPart =
-                    if json.Data.Length = 1 
+                    if json.Data.Length = 1
                     then 1
                     else readPartIndex json.Data.Length
                 printfn "\n已选择 p%i ：%s 。" selectedPart json.Data.[selectedPart - 1].Part
@@ -93,10 +89,13 @@ module FromVideoPart =
         } |> Async.RunSynchronously
 
     let cliAvid parseUid =
-        cli parseUid << sprintf "https://api.bilibili.com/x/player/pagelist?aid=%i"
+        Int64.Parse
+        >> sprintf "https://api.bilibili.com/x/player/pagelist?aid=%i"
+        >> cli parseUid
 
     let cliBvid parseUid =
-        cli parseUid << sprintf "https://api.bilibili.com/x/player/pagelist?bvid=%s"
+        sprintf "https://api.bilibili.com/x/player/pagelist?bvid=%s"
+        >> cli parseUid
 
 let showHelp () =
     printfn "获取Bilibili的弹幕数据。"
@@ -122,75 +121,56 @@ let showHelp () =
     printfn "    以“u”结尾的命令生成的文件会解密 Uid，但由于程序用的是暴力枚举 Uid ，"
     printfn "运行速度很慢，同时会占用部分磁盘空间（大约 6GiB）。"
 
-let validCmd = 
-    [ 
-        "-av"; "--FromAVId"
+let validCmd =
+    [
+        "-av" ; "--FromAVId"
         "-avu"; "--FromAVIdu"
-        "-bv"; "--FromBVId"
+        "-bv" ; "--FromBVId"
         "-bvu"; "--FromBVIdu"
-        "-c"; "--FromCId"
-        "-cu"; "--FromCIdu"
-        "-f"; "--FromDanmakuFile"
-        "-fu"; "--FromDanmakuFileu"
+        "-c"  ; "--FromCId"
+        "-cu" ; "--FromCIdu"
+        "-f"  ; "--FromDanmakuFile"
+        "-fu" ; "--FromDanmakuFileu"
     ]
 
 [<EntryPoint>]
 let main argv =
     try
+        let sw = Diagnostics.Stopwatch ()
         Console.CancelKeyPress.Add(fun _ ->
-            Console.CursorVisible <- true
             printfn "\n程序中止。"
         )
+        if argv.Length <> 0 then
+            argv
+            |> String.concat " "
+            |> printfn "当前命令：%s\n"
+
+        sw.Start ()
         match argv with
         | [| cmd; arg |] when validCmd |> List.contains cmd ->
+            (cmd.[cmd.Length - 1] = 'u', arg) ||>
             match cmd with
-            | "-av" | "--FromAVId" ->
-                arg
-                |> Int32.Parse
-                |> FromVideoPart.cliAvid false
-            
-            | "-avu" | "--FromAVIdu" ->
-                arg
-                |> Int32.Parse
-                |> FromVideoPart.cliAvid true
+            | "-av" | "--FromAVId" | "-avu" | "--FromAVIdu" -> FromVideoPart.cliAvid
+            | "-bv" | "--FromBVId" | "-bvu" | "--FromBVIdu" -> FromVideoPart.cliBvid
+            | "-c"  | "--FromCId"  | "-cu"  | "--FromCIdu"  -> 
+                fun parseUid cid ->
+                    Int64.Parse cid
+                    |> fromCid parseUid
 
-            | "-bv" | "--FromBVId" ->
-                FromVideoPart.cliBvid false arg
+            | "-f"  | "--FromDanmakuFile" | "-fu" | "--FromDanmakuFileu" ->
+                fun parseUid filePath ->
+                    File.ReadAllText filePath
+                    |> fromXml parseUid
 
-            | "-bvu" | "--FromBVIdu" ->
-                FromVideoPart.cliBvid true arg
+            | _ -> fun _ _ -> ()
 
-            | "-c" | "--FromCId" -> 
-                arg
-                |> Int32.Parse
-                |> fromCid false
-
-            | "-cu" | "--FromCIdu" -> 
-                arg
-                |> Int32.Parse
-                |> fromCid true
-
-            | "-f" | "--FromDanmakuFile" -> 
-                arg
-                |> File.ReadAllText
-                |> fromXml false
-                
-            | "-fu" | "--FromDanmakuFileu" -> 
-                arg
-                |> File.ReadAllText
-                |> fromXml true
-
-            | _ -> ()
-
-        | [||] -> showHelp ()
-
-        | _ -> 
-            argv 
-            |> String.concat " "
-            |> sprintf "参数“%s”不正确。"
-            |> printlnInRed
+        | _ ->
+            if argv.Length <> 0 then
+                printlnInRed "命令不正确。"
             showHelp ()
+        sw.Stop ()
+        printfn "\n本次运行耗时 %A 。" sw.Elapsed
         0
-    with ex -> 
+    with ex ->
         printlnInRed <| sprintf "发生异常。\n%A" ex
         ex.HResult
